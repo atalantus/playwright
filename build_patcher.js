@@ -1,6 +1,4 @@
 const fs = require('fs');
-const types = require('playwright-core/src/server/types');
-const dom = require('playwright-core/src/server/dom');
 
 function patch_driver(path) {
   console.log('Patching driver for ' + path);

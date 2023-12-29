@@ -13,9 +13,7 @@ function patch_driver(path) {
       return false;
     }
 
-    for (const target of matchedRegex) {
-      fileText = fileText.replace(target, '// ' + target);
-    }
+    fileText = fileText.replace(regex, match => `// ${match}`);
 
     fs.writeFileSync(path, fileText);
     return true;
@@ -29,29 +27,31 @@ function patch_driver(path) {
     }
   }
 
-  // patching execution context
-  const frames_path = path + 'frames.js';
+  // patch execution context
+  const frames_path = path + 'frames.ts';
   let framesFileText = fs.readFileSync(frames_path, 'utf8');
 
   framesFileText = '// ------------------------------------------------------------------\n' +
     '// undetected-playwright patch - custom imports\n' +
-    'import * as _crExecutionContext from \'./chromium/crExecutionContext\'\n' +
+    'import * as _crExecutionContext from \'./chromium/crExecutionContext\';\n' +
+    'import {CRPage} from \'playwright-core/lib/server/chromium/crPage\';\n' +
+    'import {Protocol} from \'../../types/protocol\';\n' +
     '// ------------------------------------------------------------------\n' +
     framesFileText;
 
   const contextWorldFnRegEx = /\s_context\(world:\s*types\.World\s*\)\s*:\s*Promise<dom\.FrameExecutionContext>\s*\{(?:[^}{]+|\{(?:[^}{]+|\{[^}{]*\})*\})*\}/g;
   const contextWorldFnMatches = framesFileText.match(contextWorldFnRegEx);
-  const contextWorldFnReplacement = ` async _context(world) {
+  const contextWorldFnReplacement = ` _context(world: types.World): Promise<dom.FrameExecutionContext> {
     // atm ignores world_name
     if (this._isolatedContext == undefined) {
       const worldName = 'utility';
-      const result = await this._page._delegate._mainFrameSession._client.send('Page.createIsolatedWorld', {
+      const result = await (this._page._delegate as CRPage)._mainFrameSession._client.send('Page.createIsolatedWorld', {
         frameId: this._id,
         grantUniveralAccess: true,
         worldName: worldName
       });
-      const crContext = new _crExecutionContext.CRExecutionContext(this._page._delegate._mainFrameSession._client, {id: result.executionContextId});
-      this._isolatedContext = new _dom.FrameExecutionContext(crContext, this, worldName)
+      const crContext = new _crExecutionContext.CRExecutionContext((this._page._delegate as CRPage)._mainFrameSession._client, {id: result.executionContextId} as Protocol.Runtime.ExecutionContextDescription);
+      this._isolatedContext = new dom.FrameExecutionContext(crContext, this, worldName)
     }
     return this._isolatedContext
   }`;
@@ -66,7 +66,8 @@ function patch_driver(path) {
 
   const onClearLifecycleFnRegEx = /\s_onClearLifecycle\(\)\s*\{/g;
   const onClearLifecycleMatches = framesFileText.match(onClearLifecycleFnRegEx);
-  const onClearLifecycleFnReplacement = ` _onClearLifecycle() {
+  const onClearLifecycleFnReplacement = ` _isolatedContext: any;
+  _onClearLifecycle() {
         this._isolatedContext = undefined;
         `;
 
@@ -84,4 +85,4 @@ function patch_driver(path) {
   console.log('Successfully patched all files');
 }
 
-patch_driver('../packages/playwright-core/src/server/');
+patch_driver('./packages/playwright-core/src/server/');

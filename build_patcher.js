@@ -41,7 +41,7 @@ function patch_driver(path) {
 
   const contextWorldFnRegEx = /\s_context\(world:\s*types\.World\s*\)\s*:\s*Promise<dom\.FrameExecutionContext>\s*\{(?:[^}{]+|\{(?:[^}{]+|\{[^}{]*\})*\})*\}/g;
   const contextWorldFnMatches = framesFileText.match(contextWorldFnRegEx);
-  const contextWorldFnReplacement = ` _context(world: types.World): Promise<dom.FrameExecutionContext> {
+  const contextWorldFnReplacement = ` async _context(world: types.World): Promise<dom.FrameExecutionContext> {
     // atm ignores world_name
     if (this._isolatedContext == undefined) {
       const worldName = 'utility';
